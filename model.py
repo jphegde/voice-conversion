@@ -28,6 +28,7 @@ from mfcc_utils import *
 import librosa
 import scipy
 from scipy import dot, linalg, mat
+from lstm import *
 
 def leaky_relu(x):
     return K.relu(x, 0.2)
@@ -94,14 +95,14 @@ if __name__ == "__main__":
     
     input_shape = (100, 1)
 
-    conversion_model = get_model(input_shape=input_shape)
+    conversion_model = build_model([1, 100, 200, 1])
     
     conversion_model.summary()
     #xtrain, ytrain, xtest, ytest = get_data()
     
-    conversion_model.compile(optimizer='adam',
-              loss=loss_func,
-              metrics=['accuracy'])
+    """conversion_model.compile(optimizer='adam',
+              loss='mse')"""
+              #metrics=['accuracy'])
     
     source_path = "aligned_audio_data/SF1"
     target_path = "aligned_audio_data/TF1"
@@ -123,33 +124,39 @@ if __name__ == "__main__":
         
         ytrain, mel_filter, mel_inversion_filter, spec_thresh, shorten_factor, rate = mfcc(target_path+'/'+target_data[i])
         yinfo[i] = (mel_filter, mel_inversion_filter, spec_thresh, shorten_factor)
-        xtrain = np.expand_dims(xtrain.T, axis=2)
-        ytrain = np.expand_dims(ytrain.T, axis=2)
+        xtrain = np.reshape(xtrain.T, (xtrain.shape[1], xtrain.shape[0], 1))#np.expand_dims(xtrain.T, axis=2)
+        ytrain = np.reshape(ytrain.T, (ytrain.shape[1], ytrain.shape[0], 1))#np.expand_dims(ytrain.T, axis=2)
         print('train')
         print(xtrain.shape, ytrain.shape)
-        
+        print(xtrain)
+        print('***')
+        print(ytrain)
         xval, mel_filter, mel_inversion_filter, spec_thresh, shorten_factor, rate = mfcc(source_path+'/'+source_data[150-j])
         xvinfo[i] = (mel_filter, mel_inversion_filter, spec_thresh, shorten_factor)
         
         yval, mel_filter, mel_inversion_filter, spec_thresh, shorten_factor, rate = mfcc(target_path+'/'+target_data[150-j])
         yvinfo[i] = (mel_filter, mel_inversion_filter, spec_thresh, shorten_factor)
-        xval = np.expand_dims(xval.T, axis=2)
-        yval = np.expand_dims(yval.T, axis=2)
+        xval = np.reshape(xval.T, (xval.shape[1], xval.shape[0], 1))#np.expand_dims(xval.T, axis=2)
+        yval = np.reshape(yval.T, (yval.shape[1], yval.shape[0], 1))#np.expand_dims(yval.T, axis=2)
         print('val')
         print(xval.shape, yval.shape)
         
         
         
-        conversion_model.fit(x=xtrain, y=ytrain, epochs=50, validation_data=(xval, yval))
+        conversion_model.fit(x=xtrain, y=ytrain, batch_size=1, epochs=100)#, validation_data=(xval, yval))
+        
+        #break
     
+    conversion_model.save('lstm.h5')
     test_mfcc, mel_filter, mel_inversion_filter, spec_thresh, shorten_factor, rate = mfcc(source_path+'/100001.wav')
     predict = conversion_model.predict(np.expand_dims(test_mfcc.T, axis=2))
     print(predict.shape)
     n, m, _ = predict.shape
     predict =predict.reshape(n, m)
     res = imfcc(predict.T, mel_inversion_filter, spec_thresh, shorten_factor)
-    #scipy.io.wavfile.write('res.wav', 22050, res)
-    librosa.output.write_wav('res.wav', res, 22050)
+    print('res',res.shape)
+    #scipy.io.wavfile.write('res.wav', rate, res)
+    librosa.output.write_wav('res.wav', res, rate)
     #doubt about rate here. should try with librosa because this is resulting in corrupted file
     
     #Must look at the loss function. Seems to be not changing.
